@@ -1,0 +1,814 @@
+<?php
+
+class UrlController {
+
+    /* ================= ANALISIS URL ================= */
+    private static function analyzeUrl(string $url): array {
+        $parsed = parse_url($url);
+        $host = $parsed['host'] ?? '';
+        
+        return [
+            'scheme' => $parsed['scheme'] ?? null,
+            'host' => $host,
+            'domain' => self::extractDomain($host),
+            'path' => $parsed['path'] ?? '/',
+            'query' => $parsed['query'] ?? null,
+            'fragment' => $parsed['fragment'] ?? null,
+            'port' => $parsed['port'] ?? null,
+            'is_ip' => filter_var($host, FILTER_VALIDATE_IP) !== false,
+            'has_www' => strpos($host, 'www.') === 0,
+            'url_length' => strlen($url),
+            'domain_length' => strlen($host),
+            'subdomain_count' => self::countSubdomains($host),
+            'has_port' => isset($parsed['port']),
+            'has_at_symbol' => strpos($url, '@') !== false,
+            'double_slash_position' => strpos($url, '//'),
+            'hyphen_count' => substr_count($host, '-'),
+            'special_char_count' => preg_match_all('/[^a-zA-Z0-9.-]/', $host) ?: 0,
+        ];
+    }
+
+    /* ================= EKSTRAK DOMAIN UTAMA ================= */
+    private static function extractDomain(string $host): string {
+        if (empty($host)) return '';
+        
+        $parts = explode('.', $host);
+        if (count($parts) > 1) {
+            return $parts[count($parts)-2] . '.' . $parts[count($parts)-1];
+        }
+        return $host;
+    }
+
+    /* ================= HITUNG SUBDOMAIN ================= */
+    private static function countSubdomains(string $host): int {
+        if (empty($host)) return 0;
+        
+        $parts = explode('.', $host);
+        return max(0, count($parts) - 2);
+    }
+
+    /* ================= AMBIL SEBAGIAN KONTEN WEBSITE (AMAN) ================= */
+    private static function fetchPartialContent(string $url): array {
+        $content = '';
+        $title = '';
+        $meta_description = '';
+        $meta_keywords = '';
+        
+        try {
+            // Cek apakah URL valid dan bisa diakses
+            if (!filter_var($url, FILTER_VALIDATE_URL)) {
+                throw new Exception("URL tidak valid");
+            }
+            
+            // Batasi waktu dan ukuran untuk keamanan
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 3,
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_RANGE => '0-50000', // Ambil hanya 50KB pertama
+                CURLOPT_FAILONERROR => true,
+            ]);
+            
+            $html = curl_exec($ch);
+            
+            if (curl_errno($ch)) {
+                throw new Exception("CURL Error: " . curl_error($ch));
+            }
+            
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode === 200 && !empty($html)) {
+                // Ekstrak judul - FIX: pastikan $html adalah string
+                if (preg_match('/<title>(.*?)<\/title>/si', (string)$html, $matches)) {
+                    $title = html_entity_decode(trim($matches[1]));
+                }
+                
+                // Ekstrak meta description
+                if (preg_match('/<meta\s+name="description"\s+content="([^"]*)"/si', (string)$html, $matches)) {
+                    $meta_description = html_entity_decode(trim($matches[1]));
+                }
+                
+                // Ekstrak meta keywords
+                if (preg_match('/<meta\s+name="keywords"\s+content="([^"]*)"/si', (string)$html, $matches)) {
+                    $meta_keywords = html_entity_decode(trim($matches[1]));
+                }
+                
+                // Ambil 200 karakter pertama dari body (tanpa tag)
+                $clean_text = strip_tags((string)$html);
+                $content = substr($clean_text, 0, 200);
+            }
+            
+        } catch (Exception $e) {
+            // Log error jika perlu (opsional)
+            error_log("Error fetching content for {$url}: " . $e->getMessage());
+        }
+        
+        return [
+            'title' => $title,
+            'meta_description' => $meta_description,
+            'meta_keywords' => $meta_keywords,
+            'preview_content' => $content,
+            'has_content' => !empty($content)
+        ];
+    }
+
+    /* ================= DETEKSI KATA MENCURIGAKAN ================= */
+    private static function detectSuspiciousWords(string $text): array {
+        // FIX: Pastikan $text adalah string dan tidak null
+        if (!is_string($text) || empty($text)) {
+            return [
+                'suspicious_words' => [],
+                'count' => 0,
+                'risk_level' => 'Rendah'
+            ];
+        }
+        
+        $text = strtolower($text);
+        
+        // Rule phishing keywords
+        $phishing_keywords = [
+            // Urgent/Important
+            'urgent', 'immediate action', 'segera', 'penting', 'segera verifikasi',
+            'account suspended', 'account locked', 'terkunci', 'ditangguhkan',
+            'verify your account', 'konfirmasi akun', 'verifikasi akun',
+            
+            // Security Threats
+            'security alert', 'alert keamanan', 'security breach', 'pelanggaran keamanan',
+            'unauthorized access', 'akses tidak sah', 'login attempt', 'percobaan login',
+            'suspicious activity', 'aktivitas mencurigakan',
+            
+            // Financial/Account
+            'update your information', 'perbarui informasi',
+            'billing information', 'informasi penagihan',
+            'payment overdue', 'pembayaran tertunda',
+            'invoice', 'faktur', 'tagihan',
+            'refund', 'pengembalian dana',
+            
+            // Prizes/Rewards
+            'you have won', 'anda menang', 'hadiah', 'prize', 'reward',
+            'free gift', 'hadiah gratis', 'lottery', 'undian',
+            
+            // Login Related
+            'login now', 'masuk sekarang', 'sign in', 'log in',
+            'password expired', 'kata sandi kedaluwarsa',
+            'change your password', 'ubah kata sandi',
+            
+            // Bank/Financial Institutions
+            'bank', 'bni', 'bca', 'mandiri', 'bri', 'btpn', 'cimb',
+            'paypal', 'dana', 'ovo', 'gopay', 'linkaja',
+            
+            // Social Media
+            'facebook', 'instagram', 'twitter', 'whatsapp', 'telegram',
+            
+            // Government/Institutions
+            'pajak', 'djp', 'ditjen pajak', 'bank indonesia',
+            'kemenkeu', 'kementerian keuangan',
+            
+            // Generic Suspicious
+            'click here', 'klik disini', 'download', 'unduh',
+            'limited time', 'waktu terbatas', 'offer', 'penawaran',
+        ];
+        
+        $found = [];
+        foreach ($phishing_keywords as $keyword) {
+            if (stripos($text, $keyword) !== false) {
+                $found[] = $keyword;
+            }
+        }
+        
+        return [
+            'suspicious_words' => $found,
+            'count' => count($found),
+            'risk_level' => count($found) > 5 ? 'Tinggi' : (count($found) > 2 ? 'Sedang' : 'Rendah')
+        ];
+    }
+
+    /* ================= CEK UMUR DOMAIN ================= */
+    private static function checkDomainAge(string $domain): array {
+        if (empty($domain)) {
+            return [
+                'creation_date' => null,
+                'age_days' => null,
+                'age_years' => null,
+                'risk_level' => 'UNKNOWN',
+                'is_new' => null
+            ];
+        }
+
+        $rdapUrls = [
+            "https://rdap.org/domain/{$domain}",
+            "https://rdap.verisign.com/com/v1/domain/{$domain}",
+            "https://rdap.apnic.net/domain/{$domain}"
+        ];
+
+        foreach ($rdapUrls as $url) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_SSL_VERIFYPEER => true
+            ]);
+
+            $res = curl_exec($ch);
+            curl_close($ch);
+
+            if (!$res) continue;
+
+            $data = json_decode($res, true);
+            if (!is_array($data)) continue;
+
+            if (!empty($data['events'])) {
+                foreach ($data['events'] as $event) {
+                    if ($event['eventAction'] === 'registration') {
+                        $created = strtotime($event['eventDate']);
+                        if ($created) {
+                            $days = floor((time() - $created) / 86400);
+
+                            return [
+                                'creation_date' => date('Y-m-d', $created),
+                                'age_days' => $days,
+                                'age_years' => floor($days / 365),
+                                'risk_level' =>
+                                    $days < 30 ? 'TINGGI' :
+                                    ($days < 365 ? 'SEDANG' : 'RENDAH'),
+                                'is_new' => $days < 30
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        return [
+            'creation_date' => null,
+            'age_days' => null,
+            'age_years' => null,
+            'risk_level' => 'UNKNOWN',
+            'is_new' => null
+        ];
+    }
+
+     /* ================= WEBSITE AVAILABILITY CHECK ================= */
+    private static function checkWebsiteAvailability(string $url): array {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_NOBODY => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 6,
+            CURLOPT_RETURNTRANSFER => true
+        ]);
+
+        curl_exec($ch);
+
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($error || $httpCode === 0) {
+            return [
+                'reachable' => false,
+                'risk' => 20,
+                'status' => 'UNREACHABLE'
+            ];
+        }
+
+        if ($httpCode >= 500) {
+            return [
+                'reachable' => false,
+                'risk' => 15,
+                'status' => 'SERVER_ERROR'
+            ];
+        }
+
+        return [
+            'reachable' => true,
+            'risk' => 0,
+            'status' => 'OK'
+        ];
+    }
+
+
+    /* ================= CEK BLACKLIST ================= */
+    private static function checkBlacklists(string $domain): array {
+        if (empty($domain)) {
+            return [
+                'blacklists' => [],
+                'blacklisted_count' => 0,
+                'is_blacklisted' => false
+            ];
+        }
+        
+        // Dalam implementasi nyata, ini akan melakukan lookup ke API blacklist
+        // Untuk sekarang, kita buat simulasi sederhana
+        
+        return [
+            'blacklists' => [
+                'Phishing' => [
+                    ['source' => 'phishtank.com', 'listed' => false, 'status' => 'Not checked'],
+                    ['source' => 'openphish.com', 'listed' => false, 'status' => 'Not checked']
+                ],
+                'Malware' => [
+                    ['source' => 'malwaredomains.com', 'listed' => false, 'status' => 'Not checked']
+                ],
+                'Spam' => [
+                    ['source' => 'spamhaus.org', 'listed' => false, 'status' => 'Not checked']
+                ]
+            ],
+            'blacklisted_count' => 0,
+            'is_blacklisted' => false
+        ];
+    }
+
+    /* ================= SKOR RISIKO DINAMIS ================= */
+    private static function calculateDynamicRiskScore(array $analysis, array $suspicious, array $domain_age, array $blacklist, array $trust): array {
+        $risk_score = 0;
+        $risk_factors = [];
+        
+        // 1. Analisis URL Structure (30%)
+        $url_risk = 0;
+        if ($analysis['is_ip']) {
+            $url_risk += 20;
+            $risk_factors[] = 'Menggunakan alamat IP langsung';
+        }
+        if ($analysis['has_at_symbol']) {
+            $url_risk += 25;
+            $risk_factors[] = 'Mengandung simbol @ yang mencurigakan';
+        }
+        if ($analysis['hyphen_count'] > 3) {
+            $url_risk += 15;
+            $risk_factors[] = 'Terlalu banyak tanda hubung (-)';
+        }
+        if ($analysis['special_char_count'] > 2) {
+            $url_risk += 20;
+            $risk_factors[] = 'Mengandung karakter khusus';
+        }
+        if ($analysis['url_length'] > 75) {
+            $url_risk += 10;
+            $risk_factors[] = 'URL terlalu panjang';
+        }
+        if ($analysis['subdomain_count'] > 2) {
+            $url_risk += 15;
+            $risk_factors[] = 'Terlalu banyak subdomain';
+        }
+        
+        $url_risk = min($url_risk, 30);
+        $risk_score += $url_risk;
+        
+        // 2. Kata mencurigakan (25%)
+        $keyword_risk = min($suspicious['count'] * 5, 25);
+        if ($keyword_risk > 0 && !empty($suspicious['suspicious_words'])) {
+            $risk_factors[] = 'Mengandung kata-kata phishing: ' . 
+                implode(', ', array_slice($suspicious['suspicious_words'], 0, 5));
+        }
+        $risk_score += $keyword_risk;
+        
+        // 3. Umur domain (20%)
+        $age_risk = 0;
+        if ($domain_age['age_days'] < 30) {
+            $age_risk = 20;
+            $risk_factors[] = 'Domain sangat baru (< 30 hari)';
+        } elseif ($domain_age['age_days'] < 365) {
+            $age_risk = 10;
+            $risk_factors[] = 'Domain relatif baru (< 1 tahun)';
+        }
+        $risk_score += $age_risk;
+        
+        // 4. Trust Score dari API (15%)
+        $trust_risk = 15 - ($trust['score'] * 0.15);
+        $risk_score += $trust_risk;
+        
+        // 5. Blacklist (10%)
+        if ($blacklist['is_blacklisted']) {
+            $risk_score += 10;
+            $risk_factors[] = 'Domain terdapat dalam blacklist';
+        }
+        
+        // Normalisasi ke 0-100
+        $risk_score = min(100, max(0, $risk_score));
+        
+        // Tentukan level risiko
+        if ($risk_score >= 70) {
+            $risk_level = 'SANGAT TINGGI';
+            $color = 'danger';
+        } elseif ($risk_score >= 50) {
+            $risk_level = 'TINGGI';
+            $color = 'warning';
+        } elseif ($risk_score >= 30) {
+            $risk_level = 'SEDANG';
+            $color = 'info';
+        } else {
+            $risk_level = 'RENDAH';
+            $color = 'success';
+        }
+        
+        return [
+            'score' => round($risk_score, 1),
+            'level' => $risk_level,
+            'color' => $color,
+            'factors' => $risk_factors,
+            'breakdown' => [
+                'url_structure' => $url_risk,
+                'suspicious_keywords' => $keyword_risk,
+                'domain_age' => $age_risk,
+                'trust_api' => $trust_risk,
+                'blacklist' => $blacklist['is_blacklisted'] ? 10 : 0
+            ]
+        ];
+    }
+
+    /* ================= PENJELASAN USER FRIENDLY ================= */
+    private static function generateUserFriendlyExplanation(array $risk_data, array $analysis): string {
+        $score = $risk_data['score'];
+        $level = $risk_data['level'];
+        
+        $explanations = [
+            'SANGAT TINGGI' => "⚠️ **PERINGATAN TINGGI!** URL ini menunjukkan banyak karakteristik phishing. Jangan masukkan data pribadi atau klik link!",
+            'TINGGI' => "⚠️ **Hati-hati!** URL ini memiliki beberapa tanda bahaya. Verifikasi keasliannya sebelum melanjutkan.",
+            'SEDANG' => "⚠️ **Perhatian.** URL ini memiliki beberapa aspek mencurigakan. Lebih baik berhati-hati.",
+            'RENDAH' => "✅ **Terlihat aman.** URL ini tidak menunjukkan tanda-tanda phishing yang jelas.",
+        ];
+        
+        $explanation = $explanations[$level] ?? "Tidak dapat menentukan tingkat keamanan.";
+        
+        // Tambahkan detail spesifik
+        $details = [];
+        
+        if ($analysis['is_ip']) {
+            $details[] = "• Menggunakan alamat IP, bukan nama domain";
+        }
+        
+        if ($analysis['has_at_symbol']) {
+            $details[] = "• Mengandung simbol @ yang sering digunakan untuk menyembunyikan URL asli";
+        }
+        
+        if ($analysis['special_char_count'] > 2) {
+            $details[] = "• Mengandung karakter khusus yang tidak biasa";
+        }
+        
+        if (!empty($details)) {
+            $explanation .= "\n\n**Alasan:**\n" . implode("\n", $details);
+        }
+        
+        // Saran berdasarkan level
+        $advice = [
+            'SANGAT TINGGI' => "**SARAN:** JANGAN LANJUTKAN! Tutup halaman ini dan hapus email/pesan yang mengandung link ini.",
+            'TINGGI' => "**SARAN:** Verifikasi dengan sumber resmi sebelum memasukkan informasi apapun.",
+            'SEDANG' => "**SARAN:** Pastikan Anda mengunjungi situs yang benar dengan mengetik URL langsung di browser.",
+            'RENDAH' => "**SARAN:** Tetap waspada dan periksa sertifikat SSL sebelum memasukkan data sensitif.",
+        ];
+        
+        $explanation .= "\n\n" . ($advice[$level] ?? "Tetap waspada saat browsing.");
+        
+        return $explanation;
+    }
+
+    /* ================= GOOGLE SAFE BROWSING ================= */
+    private static function checkGSB(string $url): bool {
+        $apiKey = getenv("GSB_API_KEY");
+        
+        if (empty($apiKey)) {
+            // Jika API key tidak ada, return true (aman) sebagai fallback
+            return true;
+        }
+
+        $payload = [
+            "client" => [
+                "clientId" => "eyesec",
+                "clientVersion" => "1.0"
+            ],
+            "threatInfo" => [
+                "threatTypes" => [
+                    "MALWARE",
+                    "SOCIAL_ENGINEERING",
+                    "UNWANTED_SOFTWARE",
+                    "POTENTIALLY_HARMFUL_APPLICATION"
+                ],
+                "platformTypes" => ["ANY_PLATFORM"],
+                "threatEntryTypes" => ["URL"],
+                "threatEntries" => [
+                    ["url" => $url]
+                ]
+            ]
+        ];
+
+        $ch = curl_init(
+            "https://safebrowsing.googleapis.com/v4/threatMatches:find?key={$apiKey}"
+        );
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ["Content-Type: application/json"],
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+
+        $res = curl_exec($ch);
+        
+        if (curl_errno($ch)) {
+            curl_close($ch);
+            return true; // Fallback to safe if error
+        }
+        
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode !== 200) {
+            return true; // Fallback to safe if API error
+        }
+        
+        $data = json_decode($res, true);
+        return empty($data['matches']); // true = AMAN
+    }
+
+    /* ================= VIRUSTOTAL ================= */
+    private static function checkVirusTotal(string $domain): array {
+        $apiKey = getenv("VT_API_KEY");
+        
+        if (empty($apiKey) || empty($domain)) {
+            return [
+                "malicious" => 0,
+                "suspicious" => 0,
+                "harmless" => 0,
+                "undetected" => 0
+            ];
+        }
+
+        $ch = curl_init("https://www.virustotal.com/api/v3/domains/{$domain}");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ["x-apikey: {$apiKey}"],
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+
+        $res = curl_exec($ch);
+        
+        if (curl_errno($ch)) {
+            curl_close($ch);
+            return [
+                "malicious" => 0,
+                "suspicious" => 0,
+                "harmless" => 0,
+                "undetected" => 0
+            ];
+        }
+        
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode !== 200) {
+            return [
+                "malicious" => 0,
+                "suspicious" => 0,
+                "harmless" => 0,
+                "undetected" => 0
+            ];
+        }
+        
+        $data = json_decode($res, true);
+        $stats = $data['data']['attributes']['last_analysis_stats'] ?? [];
+
+        return [
+            "malicious"  => $stats['malicious']  ?? 0,
+            "suspicious" => $stats['suspicious'] ?? 0,
+            "harmless"   => $stats['harmless']   ?? 0,
+            "undetected" => $stats['undetected'] ?? 0
+        ];
+    }
+
+    /* ================= TRUST SCORE ================= */
+    private static function trustScore(bool $gsbSafe, array $vt, bool $ssl): array {
+        $score = 0;
+
+        if ($gsbSafe)               $score += 50;
+        if (($vt['malicious'] ?? 0) == 0) $score += 40;
+        if ($ssl)                   $score += 10;
+
+        $status =
+            $score >= 80 ? "TRUSTED" :
+            ($score >= 50 ? "CAUTION" : "DANGEROUS");
+
+        return [
+            "score"  => $score,
+            "status" => $status
+        ];
+    }
+
+    /* ================= MAIN CHECK ================= */
+    public static function check(PDO $pdo) {
+        // Matikan error reporting untuk menghindari output yang tidak diinginkan
+        error_reporting(0);
+        
+        /* ===== INPUT ===== */
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (empty($data['url'])) {
+            http_response_code(400);
+            echo json_encode(["error" => "URL wajib diisi"]);
+            return;
+        }
+
+        $url = filter_var(trim($data['url']), FILTER_VALIDATE_URL);
+        if (!$url) {
+            http_response_code(400);
+            echo json_encode(["error" => "URL tidak valid"]);
+            return;
+        }
+
+        $domain = parse_url($url, PHP_URL_HOST);
+        $ssl    = stripos($url, "https://") === 0;
+
+        /* ===== ANALISIS KOMPREHENSIF ===== */
+        $url_analysis = self::analyzeUrl($url);
+        $content = self::fetchPartialContent($url);
+        
+        // FIX: Pastikan semua parameter string untuk detectSuspiciousWords
+        $text_to_check = '';
+        if (is_string($content['title'])) $text_to_check .= $content['title'] . ' ';
+        if (is_string($content['meta_description'])) $text_to_check .= $content['meta_description'] . ' ';
+        if (is_string($content['preview_content'])) $text_to_check .= $content['preview_content'];
+        
+        $suspicious = self::detectSuspiciousWords($text_to_check);
+        $domain_age = self::checkDomainAge($domain);
+        $blacklist = self::checkBlacklists($domain);
+        $availability = self::checkWebsiteAvailability($url);
+        
+        /* ===== API CHECK ===== */
+        $gsbSafe = self::checkGSB($url);
+        $vtData  = self::checkVirusTotal($domain);
+        $trust   = self::trustScore($gsbSafe, $vtData, $ssl);
+        
+        /* ===== SKOR RISIKO DINAMIS ===== */
+        $risk_data = self::calculateDynamicRiskScore(
+            $url_analysis,
+            $suspicious,
+            $domain_age,
+            $blacklist,
+            $trust
+        );
+
+        $risk_data['score'] = min(
+            100,
+            $risk_data['score'] + $availability['risk']
+        );
+
+        if (!$availability['reachable']) {
+            $final_status = "TIDAK DAPAT DIVERIFIKASI";
+        } else {
+            $final_status = $is_phishing ? "BERBAHAYA" : "AMAN";
+        }
+
+        
+        /* ===== PENJELASAN USER FRIENDLY ===== */
+        $explanation = self::generateUserFriendlyExplanation($risk_data, $url_analysis);
+        
+        $is_phishing = $risk_data['level'] === 'SANGAT TINGGI' || $risk_data['level'] === 'TINGGI';
+
+        /* ================== SIMPAN DATABASE ================== */
+        try {
+            // Cek struktur tabel terlebih dahulu
+            $stmt_check = $pdo->prepare("DESCRIBE urls");
+            $stmt_check->execute();
+            $columns = $stmt_check->fetchAll(PDO::FETCH_COLUMN);
+            
+            // Buat query dinamis berdasarkan kolom yang ada
+            $insert_columns = ['url', 'domain', 'risk_score', 'is_phishing', 'ssl_valid', 'redirect_count'];
+            $insert_values = [$url, $domain, $risk_data['score'], $is_phishing ? 1 : 0, $ssl ? 1 : 0, 0];
+            $placeholders = ['?', '?', '?', '?', '?', '?'];
+            
+            // Tambahkan kolom tambahan jika ada di tabel
+            if (in_array('suspicious_words', $columns)) {
+                $insert_columns[] = 'suspicious_words';
+                $insert_values[] = json_encode($suspicious['suspicious_words']);
+                $placeholders[] = '?';
+            }
+            
+            if (in_array('domain_age_days', $columns)) {
+                $insert_columns[] = 'domain_age_days';
+                $insert_values[] = $domain_age['age_days'];
+                $placeholders[] = '?';
+            }
+            
+            if (in_array('blacklisted', $columns)) {
+                $insert_columns[] = 'blacklisted';
+                $insert_values[] = $blacklist['is_blacklisted'] ? 1 : 0;
+                $placeholders[] = '?';
+            }
+            
+            if (in_array('url_analysis', $columns)) {
+                $insert_columns[] = 'url_analysis';
+                $insert_values[] = json_encode($url_analysis);
+                $placeholders[] = '?';
+            }
+            
+            // Buat dan eksekusi query
+            $column_list = implode(', ', $insert_columns);
+            $placeholder_list = implode(', ', $placeholders);
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO urls 
+                ({$column_list})
+                VALUES ({$placeholder_list})
+            ");
+            
+            $stmt->execute($insert_values);
+            $urlId = $pdo->lastInsertId();
+            
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["error" => "Gagal menyimpan data URL: " . $e->getMessage()]);
+            return;
+        }
+
+        /* ================= LOG REQUEST ================= */
+        try {
+            $log = $pdo->prepare("
+                INSERT INTO api_logs 
+                (api_key_id, url_id, client_ip, method, endpoint, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            
+            $log->execute([
+                $GLOBALS['api_key']['id'] ?? null,
+                $urlId,
+                $_SERVER['REMOTE_ADDR'] ?? '-',
+                $_SERVER['REQUEST_METHOD'] ?? '-',
+                $_SERVER['REQUEST_URI'] ?? '-',
+                $_SERVER['HTTP_USER_AGENT'] ?? '-'
+            ]);
+        } catch (Exception $e) {
+            // Log error optional - tidak menghentikan eksekusi
+        }
+
+        /* ================== RESPONSE LENGKAP ================== */
+        echo json_encode([
+            "success" => true,
+            "data" => [
+                "url" => $url,
+                "domain" => $domain,
+                
+                // Analisis Risiko Utama
+                "risk_analysis" => [
+                    "score" => $risk_data['score'],
+                    "level" => $risk_data['level'],
+                    "color" => $risk_data['color'],
+                    "is_phishing" => $is_phishing,
+                    "explanation" => $explanation
+                ],
+                
+                // Detail Analisis
+                "url_analysis" => $url_analysis,
+                
+                // Konten yang Diambil
+                "content_preview" => [
+                    "title" => $content['title'],
+                    "meta_description" => $content['meta_description'],
+                    "preview" => $content['preview_content'],
+                    "has_content" => $content['has_content']
+                ],
+                
+                // Deteksi Phishing
+                "phishing_detection" => [
+                    "suspicious_words" => $suspicious['suspicious_words'],
+                    "word_count" => $suspicious['count'],
+                    "keyword_risk_level" => $suspicious['risk_level']
+                ],
+                
+                // Informasi Domain
+                "domain_info" => [
+                    "age" => $domain_age,
+                    "blacklist_status" => $blacklist
+                ],
+                
+                // Check dari API Eksternal
+                "external_checks" => [
+                    "google_safe_browsing" => $gsbSafe ? "clean" : "threat_detected",
+                    "virustotal" => $vtData,
+                    "trust_score" => $trust
+                ],
+                
+                // Security Info
+                "security" => [
+                    "ssl_enabled" => $ssl,
+                    "ssl_info" => $ssl 
+                        ? "✅ Menggunakan HTTPS (enkripsi data aktif)" 
+                        : "⚠️ Tidak menggunakan HTTPS (data tidak terenkripsi)"
+                ],
+                
+                // Faktor Risiko
+                "risk_factors" => $risk_data['factors'],
+                "risk_breakdown" => $risk_data['breakdown'],
+                
+                "checked_at" => date("Y-m-d H:i:s")
+            ]
+        ]);
+    }
+}

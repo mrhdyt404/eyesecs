@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <!-- ================= BASIC META ================= -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>Eye-Sec | Website Security Checker & Open API</title>
+
+    <meta
+      name="description"
+      content="Eye-Sec adalah Website Security Checker berbasis Open API untuk menganalisis keamanan situs web secara real-time. Cek SSL, risiko phishing, dan konten mencurigakan dengan mudah."
+    />
+
+    <meta
+      name="keywords"
+      content="website security checker, cek keamanan website, phishing checker, SSL checker, API security, open api security, eye-sec"
+    />
+
+    <meta name="author" content="Eye-Sec Team" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="id" />
+    <meta name="theme-color" content="#0f172a" />
+
+    <!-- ================= CANONICAL ================= -->
+    <link
+      rel="canonical"
+      href="https://eyesecs.site/"
+    />
+
+    <!-- ================= OPEN GRAPH (FB / WA / LINKEDIN) ================= -->
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:title"
+      content="Eye-Sec | Website Security Checker & Open API"
+    />
+    <meta
+      property="og:description"
+      content="Analisis keamanan website secara real-time. Deteksi SSL, risiko phishing, dan konten berbahaya dengan Eye-Sec."
+    />
+    <meta
+      property="og:url"
+      content="https://eyesecs.site/"
+    />
+    <meta property="og:site_name" content="Eye-Sec" />
+    <meta
+      property="og:image"
+      content="https://eyesecs.site/assets/icons/logo-eyesec.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="id_ID" />
+
+    <!-- ================= TWITTER CARD ================= -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Eye-Sec | Website Security Checker" />
+    <meta
+      name="twitter:description"
+      content="Cek keamanan website dan API secara instan. Deteksi phishing, SSL, dan risiko keamanan."
+    />
+    <meta
+      name="twitter:image"
+      content="https://eyesecs.site/assets/icons/logo-eyesec.png"
+    />
+
+    <!-- ================= FAVICON & ICON ================= -->
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="https://eyesecs.site/assets/icons/logo-eyesec.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="https://eyesecs.site/assets/icons/logo-eyesec.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="https://eyesecs.site/assets/icons/logo-eyesec.png"
+    />
+    <link rel="manifest" href="https://eyesecs.site/assets/icons/site.webmanifest" />
+
+    <!-- ================= FONTS ================= -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- ================= ICON & STYLE ================= -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="canonical" href="https://eyesecs.site/">
+    <link rel="stylesheet" href="../assets/css/style.css" />
+
+    <style>
+      /* Styling tambahan untuk kompatibilitas */
+      .hidden {
+        display: none !important;
+      }
+
+      #result {
+        transition: all 0.3s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="logo">
+          <i class="fas fa-shield-alt logo-icon"></i>
+        </div>
+        <h1>Eye-Sec Site Checker</h1>
+        <p class="subtitle">
+          Analisis keamanan website secara real-time. Cek SSL, header keamanan,
+          kerentanan, dan masalah keamanan lainnya dengan satu klik.
+        </p>
+      </header>
+
+      <main>
+        <section class="scanner-section">
+          <div class="scanner-title">
+            <i class="fas fa-search"></i>
+            <h2>Pemindai Keamanan Situs Web</h2>
+          </div>
+          <div class="input-group">
+            <input
+              type="text"
+              id="urlInput"
+              placeholder="Masukkan URL (contoh: https://example.com)"
+              autocomplete="off"
+            />
+            <button id="scanBtn" onclick="checkUrl()">
+              <i class="fas fa-shield-alt"></i> Cek Keamanan
+            </button>
+          </div>
+          <div class="loading hidden" id="loadingIndicator">
+            <div class="loading-spinner"></div>
+            <p>Memeriksa keamanan website. Harap tunggu...</p>
+          </div>
+          <div class="error-message hidden" id="errorMessage">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span id="errorText"></span>
+          </div>
+        </section>
+
+        <section class="result-section" id="result">
+          <!-- Hasil akan ditampilkan di sini oleh JavaScript -->
+        </section>
+
+        <section class="features-section">
+          <div class="feature-card">
+            <i class="fas fa-certificate feature-icon"></i>
+            <h3>Pemeriksaan SSL</h3>
+            <p>
+              Analisis sertifikat SSL untuk memastikan koneksi terenkripsi dan
+              aman antara pengguna dan server.
+            </p>
+          </div>
+          <div class="feature-card">
+            <i class="fas fa-shield-virus feature-icon"></i>
+            <h3>Header Keamanan</h3>
+            <p>
+              Memeriksa header HTTP keamanan seperti CSP, HSTS, dan
+              X-Frame-Options untuk mencegah serangan umum.
+            </p>
+          </div>
+          <div class="feature-card">
+            <i class="fas fa-bug feature-icon"></i>
+            <h3>Deteksi Kerentanan</h3>
+            <p>
+              Mengidentifikasi kerentanan umum seperti XSS, SQL Injection, dan
+              konfigurasi yang salah.
+            </p>
+          </div>
+        </section>
+
+        <!-- Workflow Section -->
+        <section class="workflow-section">
+          <h2><i class="fas fa-sitemap"></i> Alur Kerja Sistem</h2>
+          <p class="section-subtitle">Lihat bagaimana Eye-Sec menganalisis keamanan website secara menyeluruh</p>
+
+          <div class="workflow-container">
+            <!-- Step 1: Client -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fas fa-user"></i>
+              </div>
+              <div class="step-content">
+                <h3>1. Client</h3>
+                <p>Pengguna mengirim permintaan analisis keamanan website melalui interface atau API</p>
+              </div>
+              <div class="step-arrow">
+                <!-- <i class="fas fa-arrow-right"></i> -->
+              </div>
+            </div>
+
+            <!-- Step 2: API -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fas fa-server"></i>
+              </div>
+              <div class="step-content">
+                <h3>2. Eye-Sec API</h3>
+                <p>Permintaan diterima oleh endpoint <code>/api/v1/url/check</code> untuk diproses</p>
+              </div>
+              <div class="step-arrow">
+                <!-- <i class="fas fa-arrow-right"></i> -->
+              </div>
+            </div>
+
+            <!-- Step 3: Normalize URL -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fas fa-link"></i>
+              </div>
+              <div class="step-content">
+                <h3>3. Normalisasi URL</h3>
+                <p>URL dinormalisasi dan diekstraksi domain utamanya untuk analisis konsisten</p>
+              </div>
+              <div class="step-arrow">
+                <!-- <i class="fas fa-arrow-right"></i> -->
+              </div>
+            </div>
+
+            <!-- Step 4: Google Safe Browsing -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fab fa-google"></i>
+              </div>
+              <div class="step-content">
+                <h3>4. Google Safe Browsing</h3>
+                <p>Pemeriksaan terhadap daftar website berbahaya dari database Google</p>
+                <div class="step-tag google-tag">Real-time Check</div>
+              </div>
+              <div class="step-arrow">
+                <!-- <i class="fas fa-arrow-right"></i> -->
+              </div>
+            </div>
+
+            <!-- Step 5: VirusTotal -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fas fa-shield-virus"></i>
+              </div>
+              <div class="step-content">
+                <h3>5. VirusTotal</h3>
+                <p>Analisis malware dan ancaman keamanan menggunakan multi-engine scanner</p>
+                <div class="step-tag virustotal-tag">70+ Antivirus</div>
+              </div>
+              <div class="step-arrow">
+                <!-- <i class="fas fa-arrow-right"></i> -->
+              </div>
+            </div>
+
+            <!-- Step 6: Trust Score Engine -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fas fa-chart-line"></i>
+              </div>
+              <div class="step-content">
+                <h3>6. Trust Score Engine</h3>
+                <p>Perhitungan skor kepercayaan berdasarkan berbagai faktor keamanan</p>
+                <div class="step-tag score-tag">AI-Powered</div>
+              </div>
+              <div class="step-arrow">
+                <!-- <i class="fas fa-arrow-right"></i> -->
+              </div>
+            </div>
+
+            <!-- Step 7: Result -->
+            <div class="workflow-step">
+              <div class="step-icon">
+                <i class="fas fa-file-code"></i>
+              </div>
+              <div class="step-content">
+                <h3>7. Hasil JSON</h3>
+                <p>Hasil analisis dikembalikan dalam format JSON yang terstruktur dan mudah dipahami</p>
+                <div class="step-tag result-tag">Structured Data</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timeline Visualization -->
+          <div class="workflow-timeline">
+            <div class="timeline-line"></div>
+            <div class="timeline-point" style="left: 0%">
+              <div class="point-label">Input</div>
+            </div>
+            <div class="timeline-point" style="left: 16.5%">
+              <div class="point-label">API Gateway</div>
+            </div>
+            <div class="timeline-point" style="left: 33%">
+              <div class="point-label">Normalisasi</div>
+            </div>
+            <div class="timeline-point" style="left: 49.5%">
+              <div class="point-label">Google Check</div>
+            </div>
+            <div class="timeline-point" style="left: 66%">
+              <div class="point-label">VirusTotal</div>
+            </div>
+            <div class="timeline-point" style="left: 82.5%">
+              <div class="point-label">Scoring</div>
+            </div>
+            <div class="timeline-point" style="left: 100%">
+              <div class="point-label">Output</div>
+            </div>
+          </div>
+
+          <!-- Additional Info -->
+          <div class="workflow-info">
+            <div class="info-card">
+              <i class="fas fa-bolt"></i>
+              <h4>Real-time Processing</h4>
+              <p>Analisis dilakukan secara real-time dengan response time &lt; 3 detik</p>
+            </div>
+            <div class="info-card">
+              <i class="fas fa-database"></i>
+              <h4>Multiple Data Sources</h4>
+              <p>Menggabungkan data dari berbagai sumber terpercaya untuk akurasi maksimal</p>
+            </div>
+            <div class="info-card">
+              <i class="fas fa-robot"></i>
+              <h4>AI-Powered Analysis</h4>
+              <p>Menggunakan algoritma machine learning untuk mendeteksi pola ancaman baru</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="api-documentation">
+          <h2><i class="fas fa-code"></i> Dokumentasi API</h2>
+
+          <div class="api-card">
+            <h3><i class="fas fa-book"></i> Cara Menggunakan API</h3>
+
+            <h4>Endpoint</h4>
+            <div class="code-block">
+              <pre><code>POST /api/v1/url/check</code></pre>
+              <button class="copy-btn" onclick="copyCode(this)">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+
+            <h4>Header</h4>
+            <div class="code-block">
+              <pre><code>X-API-KEY: YOUR_API_KEY
+Content-Type: application/json</code></pre>
+              <button class="copy-btn" onclick="copyCode(this)">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+
+            <h4>Body Request</h4>
+            <div class="code-block">
+              <pre><code>{
+  "url": "https://example.com"
+}</code></pre>
+              <button class="copy-btn" onclick="copyCode(this)">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+
+            <h4>Contoh CURL</h4>
+            <div class="code-block">
+              <pre><code>curl -X POST \
+  -H "X-API-KEY: PUBLIC_GUEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://google.com"}' \
+  https://eyesecs.site/api/v1/url/check</code></pre>
+              <button class="copy-btn" onclick="copyCode(this)">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+
+            <h4>Response Sukses</h4>
+            <div class="code-block">
+              <pre><code>{
+    "success": true,
+    "data": {
+        "url": "https://google.com",
+        "domain": "google.com",
+        "trust_score": 80,
+        "risk_score": 0.09,
+        "status": "AMAN",
+        "risk_analysis": {
+            "score": 9,
+            "level": "RENDAH",
+            "color": "#4caf50",
+            "factors": [
+                "Umur domain tidak dapat diperiksa"
+            ],
+            "breakdown": {
+                "url_structure": 0,
+                "suspicious_keywords": 0,
+                "domain_age": 5,
+                "trust_api": 4,
+                "blacklist": 0,
+                "availability": 0
+            },
+            "explanation": "\u2705 **Terlihat aman.** URL ini tidak menunjukkan tanda-tanda berbahaya yang jelas.\n\n**SARAN:** Tetap waspada dan periksa sertifikat SSL sebelum memasukkan data sensitif.",
+            "is_phishing": false
+        },
+        "phishing_detection": {
+            "suspicious_words": [],
+            "count": 0,
+            "risk_level": "Rendah"
+        },
+        "domain_info": {
+            "age": {
+                "creation_date": null,
+                "age_days": null,
+                "age_years": null,
+                "risk_level": "UNKNOWN",
+                "is_new": null,
+                "status": "Tidak dapat diperiksa"
+            },
+            "blacklist_status": {
+                "blacklists": {
+                    "Phishing": [
+                        {
+                            "source": "Google Safe Browsing",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        },
+                        {
+                            "source": "PhishTank",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        },
+                        {
+                            "source": "OpenPhish",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        },
+                        {
+                            "source": "URLhaus",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        }
+                    ],
+                    "Malware": [
+                        {
+                            "source": "Malware Domain List",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        },
+                        {
+                            "source": "MalwareDomains.com",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        }
+                    ],
+                    "Spam": [
+                        {
+                            "source": "Spamhaus",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        },
+                        {
+                            "source": "URIBL",
+                            "listed": false,
+                            "status": "Tidak terdeteksi"
+                        }
+                    ]
+                },
+                "blacklisted_count": 0,
+                "is_blacklisted": false,
+                "status": "Tidak terblacklist"
+            }
+        },
+        "url_analysis": {
+            "scheme": "https",
+            "host": "google.com",
+            "domain": "google.com",
+            "path": "/",
+            "query": null,
+            "fragment": null,
+            "port": null,
+            "is_ip": false,
+            "has_www": false,
+            "url_length": 18,
+            "domain_length": 10,
+            "subdomain_count": 0,
+            "has_port": false,
+            "has_at_symbol": false,
+            "double_slash_position": 6,
+            "hyphen_count": 0,
+            "special_char_count": 0
+        },
+        "content_preview": {
+            "title": "Google",
+            "meta_description": "",
+            "meta_keywords": "",
+            "preview_content": "Google(function(){var _g={kEI:'Kc9tacTAG8izqtsPtpzfyAM',kEXPI:'0,203004,42,1101157,2935842,14111,425603,238458,8861,5285197,79,1,230,4,69,5,25,36811439,25228681,152379,57129,8037,39775,11153,64165,232",
+            "has_content": true
+        },
+        "external_checks": {
+            "google_safe_browsing": "clean",
+            "virustotal": {
+                "malicious": 0,
+                "suspicious": 0,
+                "harmless": 0,
+                "undetected": 0,
+                "total": 0,
+                "status": "API key tidak tersedia"
+            },
+            "trust_score": {
+                "score": 80,
+                "status": "TRUSTED"
+            }
+        },
+        "security": {
+            "ssl_enabled": true,
+            "is_trusted_domain": true
+        },
+        "availability": {
+            "reachable": true,
+            "http_code": 200,
+            "response_time": 0.34,
+            "risk": 0,
+            "status": "OK",
+            "message": "Website dapat diakses"
+        },
+        "checked_at": "2026-01-19 13:28:57",
+        "report_id": "scan_696dcf29a81144.87965812"
+    }</code></pre>
+              <button class="copy-btn" onclick="copyCode(this)">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+
+            <div class="api-key-section">
+              <div class="api-key-header">
+                <h4><i class="fas fa-key"></i> API Key Generator</h4>
+              </div>
+              <div class="key-generator">
+                <div id="apiKeyDisplay">GENERATE_PUBLIC_GUEST_KEY</div>
+                <button class="copyApiKey-btn" onclick="copyApiKey(this)">
+                  <i class="far fa-copy"></i> Copy
+                </button>
+                <button id="generateApiKey" onclick="generateApiKey()">
+                  <i class="fas fa-sync-alt"></i> Generate New Key
+                </button>
+              </div>
+              <br />
+              <i id="apiKeyExpire" style="text-align: center"></i>
+              <div class="api-note">
+                <i class="fas fa-info-circle"></i>
+                <span
+                  >Gunakan <code>PUBLIC_GUEST_KEY</code> untuk testing. Untuk
+                  penggunaan produksi, harap request API key khusus.</span
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <p>
+          Website Security Checker &copy; <span id="currentYear"></span> - Alat
+          analisis keamanan website gratis
+        </p>
+        <p style="margin-top: 10px; font-size: 0.8rem">
+          Disclaimer: Alat ini memberikan analisis dasar. Untuk audit keamanan
+          menyeluruh, konsultasikan dengan profesional keamanan.
+        </p>
+      </footer>
+    </div>
+
+    <script src="../assets/js/app.js"></script>
+    <script>
+      // Set current year in footer
+      document.addEventListener("DOMContentLoaded", function () {
+        const currentYearElement = document.getElementById("currentYear");
+        if (currentYearElement) {
+          currentYearElement.textContent = new Date().getFullYear();
+        }
+      });
+      function copyApiKey(btn) {
+        const keyEl = document.getElementById("apiKeyDisplay");
+        if (!keyEl || !keyEl.textContent.trim()) {
+          alert("❌ API Key belum tersedia");
+          return;
+        }
+
+        navigator.clipboard
+          .writeText(keyEl.textContent.trim())
+          .then(() => {
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+            btn.classList.add("copied");
+
+            setTimeout(() => {
+              btn.innerHTML = original;
+              btn.classList.remove("copied");
+            }, 1500);
+          })
+          .catch((err) => {
+            console.error(err);
+            alert("❌ Gagal menyalin API Key");
+          });
+      }
+
+      function copyCode(btn) {
+        const code = btn.parentElement.querySelector("pre code");
+        if (!code) {
+          alert("❌ Tidak ada kode untuk disalin");
+          return;
+        }
+
+        const text = code.innerText;
+
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+            btn.classList.add("copied");
+
+            setTimeout(() => {
+              btn.innerHTML = original;
+              btn.classList.remove("copied");
+            }, 1500);
+          })
+          .catch((err) => {
+            console.error(err);
+            alert("❌ Gagal menyalin");
+          });
+      }
+    </script>
+  </body>
+</html>
