@@ -5,7 +5,7 @@ header('Content-Type: application/json');
 $uri    = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-$endpoint = preg_replace('#^/api#', '', $uri);
+$endpoint = str_starts_with($uri, '/api') ? substr($uri, 4) : $uri;
 $endpoint = $endpoint ?: '/';
 
 /* ROOT */

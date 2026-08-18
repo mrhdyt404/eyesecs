@@ -30,7 +30,7 @@ class ApiKeyMiddleware {
         $client_ip  = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
         /* ================= RATE LIMIT (REDIS) ================= */
-        if ($api['type'] === 'guest' && (int)$api['rate_limit'] > 0) {
+        if ($api['type'] === 'guest' && (int)$api['rate_limit'] > 0 && class_exists('Redis')) {
 
             try {
                 $redis = new Redis();
@@ -54,7 +54,7 @@ class ApiKeyMiddleware {
                     );
                 }
 
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 // FAIL-OPEN (recommended): jika Redis mati, API tetap jalan
                 error_log("Redis rate limit error: " . $e->getMessage());
             }
